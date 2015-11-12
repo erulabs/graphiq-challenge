@@ -1,5 +1,5 @@
 {
-  "extends": "es/2015/server",
+  "extends": "es/2015/client",
   "ecmaFeatures": {
     "modules": true
   },
@@ -13,6 +13,8 @@
     "no-console": 1,
     "no-unused-vars": 1,
     "no-warning-comments": 1,
-    "sort-vars": 0
+    "sort-vars": 0,
+    "no-spaced-func": 0,
+    "prefer-const": 1
   }
 }
