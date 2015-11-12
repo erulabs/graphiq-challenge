@@ -1,0 +1,18 @@
+{
+  "extends": "es/2015/server",
+  "ecmaFeatures": {
+    "modules": true
+  },
+  "rules": {
+    "lines-around-comment": 0,
+    "array-bracket-spacing": 0,
+    "newline-after-var": 0,
+    "brace-style": 2,
+    "curly": 0,
+    "spaced-comment": 0,
+    "no-console": 1,
+    "no-unused-vars": 1,
+    "no-warning-comments": 1,
+    "sort-vars": 0
+  }
+}

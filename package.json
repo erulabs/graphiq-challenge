@@ -1,0 +1,28 @@
+{
+  "name": "graphiq-challenge",
+  "version": "0.0.1",
+  "description": "A cool challenge for Graphiq",
+  "main": "solution.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erulabs/graphiq-challenge.git"
+  },
+  "author": "Seandon Mooy",
+  "license": "UNLICENSED",
+  "private": true,
+  "bugs": {
+    "url": "https://github.com/erulabs/graphiq-challenge/issues"
+  },
+  "homepage": "https://github.com/erulabs/graphiq-challenge#readme",
+  "dependencies": {
+    "babel-core": "^6.1.4",
+    "babel-loader": "^6.1.0",
+    "eslint": "^1.9.0",
+    "webpack": "^1.12.4"
+  },
+  "devDependencies": {
+    "eslint-config-es": "^0.5.0",
+    "eslint-plugin-extended": "^0.1.1",
+    "eslint-plugin-mocha": "^1.0.0"
+  }
+}
