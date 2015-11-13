@@ -1,5 +1,5 @@
 import pathfinding from 'pathfinding';
-const Stacker = function () { // eslint-disable-line no-unused-vars
+const Stacker = function () {
   const EMPTY = 0,
       WALL = 1,
       BLOCK = 2,
@@ -9,6 +9,10 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
       DIRECTIONS = [ 'left', 'up', 'right', 'down' ],
       DISQUALIFIED = 'DISQUALIFIED',
       TRUMP_CONDITION = 'TRUMP_CONDITION',
+      pathfinder = new pathfinding.AStarFinder({
+        allowDiagonal: false,
+        dontCrossCorners: true
+      }),
       randomChoiceInArray = (arr) => {
         return arr[Math.random() * arr.length >> 0];
       },
@@ -29,10 +33,12 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
         return true;
       };
 
-  let ARMS_FULL = false,
-      DISCOVERING = true,
-      STAIRCASE_MAP = false,
-      TREASURE_POS = null;
+  let myArmsFull = false,
+      myStaircase = false,
+      myTreasure = null,
+      myRoute = [],
+      myTurnCount = 0,
+      myCurrentStaircaseLevel = 1;
 
   class Position {
     constructor (x, y) {
@@ -68,7 +74,6 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
       return new Position(this.x + 1, this.y);
     }
   }
-
   class Map {
     constructor () {
       this.data = {};
@@ -99,17 +104,33 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
       if (this.data[pos.x][pos.y] === undefined) return false;
       return this.data[pos.x][pos.y];
     }
+    findPath (fromPos, toPos) {
+      const grid = new pathfinding.Grid(this.exportCoods());
+      return pathfinder.findPath(
+        fromPos.x - this.lowestX,
+        fromPos.y - this.lowestY,
+        toPos.x - this.lowestX,
+        toPos.y - this.lowestY,
+        grid
+      ).map((coord) => {
+        coord[0] += this.lowestX;
+        coord[1] += this.lowestY;
+        return coord;
+      });
+    }
     exportCoods () {
       const exported = [];
+      const BLOCKED = 1;
+      const WALKABLE = 0;
       let xi = 0;
-      for (let x = this.lowestX; x <= this.highestX; x++) {
+      for (let x = this.lowestX - 1; x <= this.highestX + 1; x++) {
         let yi = 0;
         exported[xi] = [];
         for (let y = this.lowestY; y <= this.highestY; y++) {
           const target = this.getCell({ x, y });
-          if (!target) exported[xi][yi] = 1;
-          else if (target.type === WALL) exported[xi][yi] = 1;
-          else exported[xi][yi] = 0;
+          if (!target) exported[xi][yi] = BLOCKED;
+          else if (target.type === WALL) exported[xi][yi] = BLOCKED;
+          else exported[xi][yi] = WALKABLE;
           yi++;
         }
         xi++;
@@ -160,7 +181,6 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
     // This condition iterates thru each DIRECTION - so a lot of small tasks are done here
     discoverSurroundings (cell) {
       const points = pointMap();
-      map.addCell(myPosition, cell);
       for (const direction in DIRECTIONS) {
         if (!DIRECTIONS.hasOwnProperty(direction)) continue;
         const directionName = DIRECTIONS[direction];
@@ -173,10 +193,10 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
         else if (directionName === 'down') directionPos = myPosition.down();
 
         // Find treasure
-        if (cell[directionName].type === GOLD) TREASURE_POS = directionPos;
+        if (cell[directionName].type === GOLD) myTreasure = directionPos;
 
-        // Prefer to move in directions we don't know about
-        if (DISCOVERING) {
+        // Discovery mode if we have no route
+        if (myRoute.length === 0) {
           // Prefer to go away from where we came
           if (myLastPosition.x === directionPos.x && myLastPosition.y === directionPos.y) points[directionName] = -100;
           // Prefer to move to cells to haven't discovered
@@ -196,33 +216,68 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
     // Always pickup a block if we're standing on it and our arms aren't empty
     dontBeLazy (cell) {
       const points = pointMap();
-      if (cell.type === BLOCK && ARMS_FULL === false) points.pickup = 50;
+      if (cell.type === BLOCK && myArmsFull === false) points.pickup = 50;
       return points;
     },
-    // Design Staircase
-    designStaircase () {
+    designAndBuildTheStaircase () {
       const points = pointMap();
-      if (TREASURE_POS && STAIRCASE_MAP === false) {
-        STAIRCASE_MAP = true;
-        buildStaircaseDown(TREASURE_POS, function (tempDesign) {
-          STAIRCASE_MAP = tempDesign;
-          map.exportCoods();
+      // Only try to build the staircase every 3 turns (throttle our expensive / recursive calls)
+      if (myTreasure && myStaircase === false && (myTurnCount % 3 === 0)) {
+        buildStaircaseDown(myTreasure, function (tempDesign) {
+          if (!myStaircase) {
+            myStaircase = tempDesign;
+          }
         });
       }
-      return points;
-    },
-    // If we have designed a staircase
-    buildStaircase () {
-      const points = pointMap();
-      if (STAIRCASE_MAP && typeof STAIRCASE_MAP === 'object') {
-        return TRUMP_CONDITION;
+      if (myStaircase && myArmsFull === true && myRoute.length === 0) {
+        let target = false;
+        for (const x in myStaircase.data) {
+          if (!myStaircase.data.hasOwnProperty(x)) continue;
+          for (const y in myStaircase.data[x]) {
+            if (!myStaircase.data[x].hasOwnProperty(y)) continue;
+            const cell = map.getCell({ x, y });
+            console.log('test', cell.level, myCurrentStaircaseLevel, cell.level, myStaircase.getCell({ x, y }).level);
+            if (cell.level < myCurrentStaircaseLevel && cell.level <= myStaircase.getCell({ x, y }).level) {
+              console.log('i found a target');
+              target = { x, y };
+              break;
+            }
+          }
+        }
+        if (target) {
+          try {
+            myRoute = map.findPath(myPosition, target);
+          } catch (error) {
+            console.log('findPath errored', error.message);
+          }
+          console.log(myPosition, myRoute);
+        }
       }
       return points;
     },
+
+    followThePathMrRobot () {
+      const points = pointMap();
+      if (myRoute.length > 0) {
+        const target = myRoute[0];
+        for (let i = 0; i < DIRECTIONS.length; i++) {
+          const direction = DIRECTIONS[i];
+          const testTarget = myPosition[direction]();
+          console.log(`Im at ${myPosition}, I want to go to ${testTarget} / ${target}`);
+          if (testTarget.x === target[0] && testTarget.y === target[1]) {
+            console.log('Im following my nose to', target);
+            points[direction] = 200;
+            break;
+          }
+        }
+      }
+      return points;
+    },
+
     // If we dont know where the treasure is, let's not worry about picking up boxes
     isTreastureKnown () {
       const points = pointMap();
-      if (!TREASURE_POS) {
+      if (!myTreasure) {
         // Might as well pick one up on our way exploring :P
         //points['pickup'] = DISQUALIFIED;
         points.drop = DISQUALIFIED;
@@ -232,7 +287,7 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
     // If our arms are full
     armsFull () {
       const points = pointMap();
-      if (ARMS_FULL) points.pickup = DISQUALIFIED;
+      if (myArmsFull) points.pickup = DISQUALIFIED;
       else points.drop = DISQUALIFIED;
       return points;
     }
@@ -266,7 +321,7 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
       // Take an average of all points for this action:
       TALLIED[action] = POINTS[action].reduce((a, b) => {
         return a + b;
-      }) / POINTS[action].length;
+      });
       // Mark high score
       if (TALLIED[action] === highestScore) highestAction.push(action);
       if (TALLIED[action] > highestScore || highestScore === null) {
@@ -278,8 +333,8 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
     if (highestAction.length > 1) highestActionChoice = randomChoiceInArray(highestAction);
     else highestActionChoice = highestAction[0];
     // Outcome of our choice should be noted here
-    if (highestActionChoice === 'pickup') ARMS_FULL = true;
-    else if (highestActionChoice === 'drop') ARMS_FULL = false;
+    if (highestActionChoice === 'pickup') myArmsFull = true;
+    else if (highestActionChoice === 'drop') myArmsFull = false;
     else if (highestActionChoice === 'left') myPosition.moveLeft();
     else if (highestActionChoice === 'up') myPosition.moveUp();
     else if (highestActionChoice === 'right') myPosition.moveRight();
@@ -287,9 +342,16 @@ const Stacker = function () { // eslint-disable-line no-unused-vars
     // Record last position
     if (myPosition.x !== myLastPosition.x) myLastPosition.x = myPosition.x;
     if (myPosition.y !== myLastPosition.y) myLastPosition.y = myPosition.y;
-
+    // Clear route if we've made it
+    if (myRoute.length > 0) {
+      if (myRoute[0][0] === myPosition.x && myRoute[0][1] === myPosition.y) {
+        myRoute.shift();
+      }
+    }
+    myTurnCount++;
     return highestActionChoice;
   };
 };
 
+// Expose the Stacker class
 window.Stacker = Stacker;
