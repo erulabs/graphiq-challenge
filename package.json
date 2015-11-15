@@ -27,6 +27,7 @@
     "gulp-sourcemaps": "^1.6.0",
     "pathfinding": "^0.4.17",
     "webpack": "^1.12.4",
+    "webpack-error-notification": "^0.1.4",
     "webpack-stream": "^2.1.1"
   }
 }

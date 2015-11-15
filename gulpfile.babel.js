@@ -4,6 +4,7 @@ const gulp = require('gulp');
 const sourcemaps = require('gulp-sourcemaps');
 const eslint = require('gulp-eslint');
 const webpack = require('webpack-stream');
+const WebpackErrorNotificationPlugin = require('webpack-error-notification');
 const nodeModules = {};
 
 fs.readdirSync('node_modules').filter(function (x) {
@@ -24,6 +25,9 @@ gulp.task ('webpack', function () {
       },
       devtool: 'source-map',
       module: {
+        plugins: [
+          new WebpackErrorNotificationPlugin()
+        ],
         loaders: [
             {
               test: /\.es6?$/,

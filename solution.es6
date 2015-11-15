@@ -42,8 +42,8 @@ const Stacker = function () {
 
   class Position {
     constructor (x, y) {
-      this.x = x;
-      this.y = y;
+      this.x = parseInt(x, 10);
+      this.y = parseInt(y, 10);
     }
     moveLeft () {
       this.x -= 1;
@@ -135,6 +135,7 @@ const Stacker = function () {
         }
         xi++;
       }
+      //console.table(exported);
       return exported;
     }
   }
@@ -143,7 +144,7 @@ const Stacker = function () {
   const myPosition = new Position(0, 0);
   const map = new Map();
 
-  const buildStaircaseDown = (pos, callback, level = TREASURE_LEVEL, staircase = new Map()) => {
+  const buildStaircaseDown = (pos, callback, level = TREASURE_LEVEL - 1, staircase = new Map()) => {
     // We're a staircase!
     if (level === 1) return callback(staircase);
     // Get neighbors
@@ -220,11 +221,11 @@ const Stacker = function () {
       return points;
     },
     designAndBuildTheStaircase () {
-      const points = pointMap();
       // Only try to build the staircase every 3 turns (throttle our expensive / recursive calls)
       if (myTreasure && myStaircase === false && (myTurnCount % 3 === 0)) {
         buildStaircaseDown(myTreasure, function (tempDesign) {
           if (!myStaircase) {
+            console.log('Staircase complete!');
             myStaircase = tempDesign;
           }
         });
@@ -236,34 +237,36 @@ const Stacker = function () {
           for (const y in myStaircase.data[x]) {
             if (!myStaircase.data[x].hasOwnProperty(y)) continue;
             const cell = map.getCell({ x, y });
-            console.log('test', cell.level, myCurrentStaircaseLevel, cell.level, myStaircase.getCell({ x, y }).level);
+            // console.log('test', cell.level, myCurrentStaircaseLevel, cell.level, myStaircase.getCell({ x, y }).level);
             if (cell.level < myCurrentStaircaseLevel && cell.level <= myStaircase.getCell({ x, y }).level) {
-              console.log('i found a target');
-              target = { x, y };
+              target = cell.pos;
               break;
             }
           }
+          if (target) break;
         }
         if (target) {
           try {
             myRoute = map.findPath(myPosition, target);
           } catch (error) {
             console.log('findPath errored', error.message);
+            myRoute = [];
           }
-          console.log(myPosition, myRoute);
+          console.log('tried to route to', target, 'from', myPosition, 'result:', myRoute);
+          //console.table(myRoute);
         }
       }
-      return points;
     },
 
     followThePathMrRobot () {
       const points = pointMap();
       if (myRoute.length > 0) {
         const target = myRoute[0];
+        console.log('Route target aquired:', target);
         for (let i = 0; i < DIRECTIONS.length; i++) {
           const direction = DIRECTIONS[i];
           const testTarget = myPosition[direction]();
-          console.log(`Im at ${myPosition}, I want to go to ${testTarget} / ${target}`);
+          console.log('Im at', myPosition, 'I want to go to', testTarget, `/ ${target}`);
           if (testTarget.x === target[0] && testTarget.y === target[1]) {
             console.log('Im following my nose to', target);
             points[direction] = 200;
@@ -302,6 +305,7 @@ const Stacker = function () {
     for (const conditionName in CONDITIONS) {
       if (!CONDITIONS.hasOwnProperty(conditionName)) continue;
       const ratings = CONDITIONS[conditionName](cell);
+      if (ratings === undefined) continue;
       if (ratings === TRUMP_CONDITION) break;
       // merge rating with points
       for (const action in ratings) {
