@@ -46,7 +46,13 @@
 
 	'use strict';
 	
-	var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+	var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })(); // GraphIQ challenge
+	// completed by Seandon Mooy - seandon.mooy@gmail.com
+	// Written in ES2015
+	
+	// TODO: Profile the route and conditions systems. A very quick profiling made me suspect I've created a small leak.
+	
+	// imor's "pathfinding" - https://www.npmjs.com/package/pathfinding
 	
 	var _pathfinding = __webpack_require__(1);
 	
@@ -58,16 +64,24 @@
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 	
+	// We export only one class with one method - the Stacker, with Stacker.turn
 	var Stacker = function Stacker() {
+	  // Stacker Class Constants and helper functions
 	  var EMPTY = 0,
 	      WALL = 1,
 	      BLOCK = 2,
 	      GOLD = 3,
-	      TREASURE_LEVEL = 8,
+	
+	  // The Z height of the Treasure.
+	  TREASURE_LEVEL = 8,
 	      ACTIONS = ['left', 'up', 'right', 'down', 'pickup', 'drop'],
 	      DIRECTIONS = ['left', 'up', 'right', 'down'],
-	      DISQUALIFIED = 'DISQUALIFIED',
-	      TRUMP_CONDITION = 'TRUMP_CONDITION',
+	
+	  // Used to disqualify actions - used when it's best not left up to vote ratings, such as moving into a wall.
+	  DISQUALIFIED = 'DISQUALIFIED',
+	
+	  // Used by conditions to stop the condition evaluation loop - used to short curcuit if we know what we want to do.
+	  TRUMP_CONDITION = 'TRUMP_CONDITION',
 	      pathfinder = new _pathfinding2.default.AStarFinder({
 	    allowDiagonal: false,
 	    dontCrossCorners: true
@@ -76,7 +90,7 @@
 	    return arr[Math.random() * arr.length >> 0];
 	  },
 	
-	  // Create a template point map
+	  // Create a template point map - might be faster without the .map but I felt like being clever.
 	  pointMap = function pointMap() {
 	    var map = {};
 	    ACTIONS.map(function (action) {
@@ -84,21 +98,28 @@
 	    });
 	    return map;
 	  },
-	      isTraversable = function isTraversable(currentCell, desiredCell) {
-	    // Disqualify walls
+	
+	  // Returns a bool which represents if a cell isTraversable.
+	  isTraversable = function isTraversable(currentCell, desiredCell) {
 	    if (desiredCell.type === WALL) return false;
-	    // Disqualify heights
 	    if (desiredCell.level > currentCell.level + 1) return false;
-	    // Everything else is OK
 	    return true;
 	  };
 	
+	  // Stacker Class variables (all are private since no API other than .turn is required of us).
 	  var myArmsFull = false,
 	      myStaircase = false,
 	      myTreasure = null,
 	      myRoute = [],
 	      myTurnCount = 0,
-	      myCurrentStaircaseLevel = 1;
+	      myLastAction = false,
+	
+	  // myCurrentStaircaseLevel represents our build progress. We build all tiles up to myCurrentStaircaseLevel then increment by 1 and continue.
+	  // This prevents us from wanting to build a tile to the point where we couldn't find our way down :O
+	  myCurrentStaircaseLevel = 1;
+	
+	  // A helper class which represents a position. It is a glorified x,y coord with syntax helpers.
+	  // It is here we define the directions and how they co-respond to coords (left, down = negative | right, down = positive)
 	
 	  var Position = (function () {
 	    function Position(x, y) {
@@ -156,6 +177,7 @@
 	
 	    return Position;
 	  })();
+	  // A class which represents the map - this is used twice - as our bots memory of the world and to hold plans for the staircase.
 	
 	  var Map = (function () {
 	    function Map() {
@@ -168,6 +190,7 @@
 	      this.highestX = 0;
 	      this.highestY = 0;
 	    }
+	    // Adds new data to the map, records lowest/highest.
 	
 	    _createClass(Map, [{
 	      key: 'addCell',
@@ -186,8 +209,6 @@
 	          if (pos.y > this.highestY) this.highestY = pos.y;
 	        }
 	      }
-	      // Get cell is a sort of loose javascripty interface - just pass it an object with x and y (that is sometimes a Position, and sometimes not)
-	
 	    }, {
 	      key: 'getCell',
 	      value: function getCell(pos) {
@@ -195,57 +216,61 @@
 	        if (this.data[pos.x][pos.y] === undefined) return false;
 	        return this.data[pos.x][pos.y];
 	      }
+	      // findPath does what it says. In fact all the heavy lifting is done in 'pathfinder.findPath'
+	      // But the map format conversion (from object with negative indexes to an array of arrays) is very important
+	
 	    }, {
 	      key: 'findPath',
 	      value: function findPath(fromPos, toPos) {
 	        var _this = this;
 	
-	        var grid = new _pathfinding2.default.Grid(this.exportCoods());
-	        return pathfinder.findPath(fromPos.x - this.lowestX, fromPos.y - this.lowestY, toPos.x - this.lowestX, toPos.y - this.lowestY, grid).map(function (coord) {
-	          coord[0] += _this.lowestX;
-	          coord[1] += _this.lowestY;
-	          return coord;
-	        });
-	      }
-	    }, {
-	      key: 'exportCoods',
-	      value: function exportCoods() {
-	        var exported = [];
-	        var BLOCKED = 1;
-	        var WALKABLE = 0;
+	        var exported = [],
+	            BLOCKED = 1,
+	            WALKABLE = 0;
+	        // Export our mapdata as an array
 	        var yi = 0;
 	        for (var y = this.highestY; y >= this.lowestY; y--) {
 	          var xi = 0;
 	          exported[yi] = [];
 	          for (var x = this.lowestX; x <= this.highestX; x++) {
 	            var target = this.getCell({ x: x, y: y });
+	            // Note that we just assume unknown cells are BLOCKED. I kind of wonder if, after this is all complete, it wouldn't be faster to
+	            // assume they're WALKABLE instead and recalculate if we're wrong. The idea is that we'd perhaps walk "the long way around"
+	            // because we just haven't descovered the correct way.
 	            if (!target) exported[yi][xi] = BLOCKED;else if (target.type === WALL) exported[yi][xi] = BLOCKED;else exported[yi][xi] = WALKABLE;
 	            xi++;
 	          }
 	          yi++;
 	        }
-	        return exported;
+	        // Pass map to the pathfinder, ask for a path and then un-offset the outputs
+	        var grid = new _pathfinding2.default.Grid(exported);
+	        return pathfinder.findPath(fromPos.x - this.lowestX, fromPos.y - this.lowestY, toPos.x - this.lowestX, toPos.y - this.lowestY, grid).map(function (coord) {
+	          coord[0] += _this.lowestX;
+	          coord[1] += _this.lowestY;
+	          return coord;
+	        });
 	      }
 	    }]);
 	
 	    return Map;
 	  })();
 	
-	  var myLastPosition = new Position(0, 0);
-	  var myPosition = new Position(0, 0);
-	  var map = new Map();
+	  var myLastPosition = new Position(0, 0),
+	      myPosition = new Position(0, 0),
+	      map = new Map();
 	
+	  // Recursive - builds a staircase down from a Position (called initially on the TREASURE)
 	  var buildStaircaseDown = function buildStaircaseDown(pos, callback) {
 	    var level = arguments.length <= 2 || arguments[2] === undefined ? TREASURE_LEVEL - 1 : arguments[2];
 	    var staircase = arguments.length <= 3 || arguments[3] === undefined ? new Map() : arguments[3];
 	
-	    // We're a staircase!
+	    // It is complete if it is at ground level
 	    if (level === 1) return callback(staircase);
-	    // Get neighbors
-	    var directions = [map.getCell(pos.left()), map.getCell(pos.up()), map.getCell(pos.down()), map.getCell(pos.right())];
-	    for (var i = 0; i < directions.length; i++) {
-	      var direction = directions[i];
-	      // If the direction is false it means its not in the map
+	    // Find candidate tiles
+	    for (var i = 0; i < DIRECTIONS.length; i++) {
+	      // Get the cell in that direction
+	      var direction = map.getCell(pos[DIRECTIONS[i]]());
+	      // If the direction is known and a block or empty
 	      if (direction && (direction.type === BLOCK || direction.type === EMPTY)) {
 	        // Ignore cells that are already part of the staircase
 	        if (staircase.getCell(direction.pos)) continue;
@@ -254,78 +279,63 @@
 	          type: BLOCK,
 	          pos: direction.pos
 	        });
-	        //console.log('built block, current:', staircase)
 	        buildStaircaseDown(direction.pos, callback, level, staircase);
 	        break;
 	      }
 	    }
 	  };
 	
-	  // Evaluation conditions
+	  // Evaluation conditions - functions which return undefined or with a vote - an object which contains actions and points
+	  // After all conditions are evaluated, points are tallied and an action is chosen.
+	  // Conditions can set an action to DISQUALIFIED, in which case no tallying will take place.
 	  var CONDITIONS = {
-	    byDefaultDontDrop: function byDefaultDontDrop() {
-	      var points = pointMap();
-	      points.drop = DISQUALIFIED;
-	      return points;
+	    clearRouteIfWeveMadeItFromTheBottomNowWereHere: function clearRouteIfWeveMadeItFromTheBottomNowWereHere() {
+	      if (myRoute.length > 0 && myRoute[0][0] === myPosition.x && myRoute[0][1] === myPosition.y) myRoute.shift();
 	    },
 	
-	    // This condition iterates thru each DIRECTION - so a lot of small tasks are done here
+	    // This condition iterates thru each DIRECTION - so a lot of small tasks are done here for performance reasons
 	    discoverSurroundings: function discoverSurroundings(cell) {
 	      var points = pointMap();
-	      for (var direction in DIRECTIONS) {
-	        if (!DIRECTIONS.hasOwnProperty(direction)) continue;
-	        var directionName = DIRECTIONS[direction];
-	        if (directionName === undefined) continue;
-	        var directionPos = new Position();
-	
-	        if (directionName === 'left') directionPos = myPosition.left();else if (directionName === 'up') directionPos = myPosition.up();else if (directionName === 'right') directionPos = myPosition.right();else if (directionName === 'down') directionPos = myPosition.down();
-	
+	      for (var i = 0; i < DIRECTIONS.length; i++) {
+	        var direction = DIRECTIONS[i];
+	        var directionPos = myPosition[direction]();
+	        map.addCell(directionPos, cell[direction]);
+	        // Prefer to go away from where we came if we have no route (ie: continue in the same direction)
+	        if (myRoute.length === 0 && myLastAction === direction && myStaircase === false) points[myLastAction] = 50;
 	        // Find treasure
-	        if (cell[directionName].type === GOLD) myTreasure = directionPos;
+	        if (cell[direction].type === GOLD && !myTreasure) myTreasure = directionPos;
 	
-	        // Discovery mode if we have no route
-	        if (myRoute.length === 0) {
-	          // Prefer to go away from where we came
-	          if (myLastPosition.x === directionPos.x && myLastPosition.y === directionPos.y) points[directionName] = -100;
-	          // Prefer to move to cells to haven't discovered
-	          if (map.getCell(directionPos) === false) {
-	            if (cell[directionName].type !== WALL) points[directionName] = 50;
-	          }
+	        // Prefer to move to cells that haven't discovered
+	        if (map.getCell(directionPos) === false && cell[direction].type !== WALL && myStaircase === false) points[direction] = 50;
+	
+	        if (isTraversable(cell, cell[direction]) === false) {
+	          points[direction] = DISQUALIFIED;
+	          //console.log('points1', points);
+	          continue;
 	        }
-	
-	        // Add to map!
-	        map.addCell(directionPos, cell[directionName]);
-	
-	        // Always disable nontraversable tiles
-	        if (isTraversable(cell, cell[directionName]) === false) points[directionName] = DISQUALIFIED;
 	      }
+	      //console.log('points', points);
 	      return points;
 	    },
 	
-	    // Always pickup a block if we're standing on it and our arms aren't empty
-	    dontBeLazy: function dontBeLazy(cell) {
-	      var points = pointMap();
-	      if (cell.type === BLOCK && myArmsFull === false) points.pickup = 50;
-	      return points;
-	    },
+	    // Calls buildStaircaseDown when ready, then uses map.findPath to direct us to the goals!
 	    designAndBuildTheStaircase: function designAndBuildTheStaircase() {
-	      // Only try to build the staircase every 3 turns (throttle our expensive / recursive calls)
-	      if (myTreasure && myStaircase === false && myTurnCount % 3 === 0) {
+	      // Only try to build the staircase every 5 turns (throttle our expensive / recursive calls)
+	      // But there is also a more practical reason - most of the time when we first see the treasure,
+	      // we don't know much about its surroundings!
+	      if (myTreasure && myStaircase === false && myTurnCount % 5 === 0) {
 	        buildStaircaseDown(myTreasure, function (tempDesign) {
-	          if (!myStaircase) {
-	            console.log('Staircase complete!');
-	            myStaircase = tempDesign;
-	          }
+	          if (!myStaircase) myStaircase = tempDesign;
 	        });
 	      }
-	      if (myStaircase && myArmsFull === true && myRoute.length === 0) {
+	      // Looping over objects like this is expensive and lame. I'm sure this could be more clever.
+	      if (myStaircase && myArmsFull === true && myRoute.length === 0 && myTurnCount % 20 === 0) {
 	        var target = false;
 	        for (var x in myStaircase.data) {
 	          if (!myStaircase.data.hasOwnProperty(x)) continue;
 	          for (var y in myStaircase.data[x]) {
 	            if (!myStaircase.data[x].hasOwnProperty(y)) continue;
 	            var cell = map.getCell({ x: x, y: y });
-	            // console.log('test', cell.level, myCurrentStaircaseLevel, cell.level, myStaircase.getCell({ x, y }).level);
 	            if (cell.level < myCurrentStaircaseLevel && cell.level <= myStaircase.getCell({ x: x, y: y }).level) {
 	              target = cell.pos;
 	              break;
@@ -335,11 +345,11 @@
 	        }
 	        if (target) {
 	          myRoute = map.findPath(myPosition, target);
-	          console.log('tried to route to', target, 'from', myPosition, 'result:', myRoute);
-	          //console.table(myRoute);
 	        }
 	      }
 	    },
+	
+	    // Highly prefer the route!
 	    followThePathMrRobot: function followThePathMrRobot() {
 	      var points = pointMap();
 	      if (myRoute.length > 0) {
@@ -348,8 +358,7 @@
 	          var direction = DIRECTIONS[i];
 	          var testTarget = myPosition[direction]();
 	          if (testTarget.x === target[0] && testTarget.y === target[1]) {
-	            console.log('Im following my nose to', target);
-	            points[direction] = 200;
+	            points[direction] = 2000;
 	            break;
 	          }
 	        }
@@ -357,21 +366,37 @@
 	      return points;
 	    },
 	
-	    // If we dont know where the treasure is, let's not worry about picking up boxes
-	    isTreastureKnown: function isTreastureKnown() {
+	    // Don't waste turns doing impossible things, also, dont pick up parts of the staircase!
+	    howDoArmsWorkAnyways: function howDoArmsWorkAnyways(cell) {
 	      var points = pointMap();
-	      if (!myTreasure) {
-	        // Might as well pick one up on our way exploring :P
-	        //points['pickup'] = DISQUALIFIED;
-	        points.drop = DISQUALIFIED;
-	      }
-	      return points;
-	    },
 	
-	    // If our arms are full
-	    armsFull: function armsFull() {
-	      var points = pointMap();
+	      //if (!myTreasure && cell.type === BLOCK && myArmsFull === false)
+	      //  points.pickup = 50;
+	      //if (myTreasure && myStaircase) {
+	      //  if (myArmsFull && myStaircase.getCell(myPosition)) {
+	      //    if (cell.level < myCurrentStaircaseLevel && cell.level <= myStaircase.getCell(myPosition).level)
+	      //      points.drop = 500;
+	      //    points.pickup = DISQUALIFIED;
+	      //  } else if (!myArmsFull && !myStaircase.getCell(myPosition)) {
+	      //    points.pickup = 500;
+	      //  }
+	      //}
+	
+	      points.drop = DISQUALIFIED;
+	
+	      if (cell.type === BLOCK) points.pickup = 250;
+	
+	      if (myTreasure && myStaircase) {
+	        if (myStaircase.getCell(myPosition)) {
+	          points.pickup = DISQUALIFIED;
+	          if (cell.level < myCurrentStaircaseLevel && cell.level < myStaircase.getCell(myPosition).level) {
+	            points.drop = 500;
+	          }
+	        }
+	      }
+	
 	      if (myArmsFull) points.pickup = DISQUALIFIED;else points.drop = DISQUALIFIED;
+	
 	      return points;
 	    }
 	  };
@@ -390,13 +415,7 @@
 	      if (ratings === TRUMP_CONDITION) break;
 	      // merge rating with points
 	      for (var action in ratings) {
-	        if (!ratings.hasOwnProperty(action)) continue;
-	        var rating = ratings[action];
-	        if (rating === DISQUALIFIED) {
-	          POINTS[action] = DISQUALIFIED;
-	        } else if (_typeof(POINTS[action]) === 'object') {
-	          POINTS[action].push(rating);
-	        }
+	        if (ratings[action] === DISQUALIFIED) POINTS[action] = DISQUALIFIED;else if (_typeof(POINTS[action]) === 'object') POINTS[action].push(ratings[action]);
 	      }
 	    }
 	    // Find highest scoring, nondisqualified action
@@ -416,20 +435,17 @@
 	        highestAction = [action];
 	      }
 	    }
+	    // Record last position
+	    if (myPosition.x !== myLastPosition.x) myLastPosition.x = myPosition.x;
+	    if (myPosition.y !== myLastPosition.y) myLastPosition.y = myPosition.y;
+	
 	    // If we have no preference, random between nondisqualified
 	    if (highestAction.length > 1) highestActionChoice = randomChoiceInArray(highestAction);else highestActionChoice = highestAction[0];
 	    // Outcome of our choice should be noted here
 	    if (highestActionChoice === 'pickup') myArmsFull = true;else if (highestActionChoice === 'drop') myArmsFull = false;else if (highestActionChoice === 'left') myPosition.moveLeft();else if (highestActionChoice === 'up') myPosition.moveUp();else if (highestActionChoice === 'right') myPosition.moveRight();else if (highestActionChoice === 'down') myPosition.moveDown();
-	    // Record last position
-	    if (myPosition.x !== myLastPosition.x) myLastPosition.x = myPosition.x;
-	    if (myPosition.y !== myLastPosition.y) myLastPosition.y = myPosition.y;
-	    // Clear route if we've made it
-	    if (myRoute.length > 0) {
-	      if (myRoute[0][0] === myPosition.x && myRoute[0][1] === myPosition.y) {
-	        myRoute.shift();
-	      }
-	    }
 	    myTurnCount++;
+	    myLastAction = highestActionChoice;
+	    console.log(highestActionChoice);
 	    return highestActionChoice;
 	  };
 	};

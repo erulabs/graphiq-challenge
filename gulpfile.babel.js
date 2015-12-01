@@ -28,19 +28,17 @@ gulp.task ('webpack', function () {
         plugins: [
           new WebpackErrorNotificationPlugin()
         ],
-        loaders: [
-            {
-              test: /\.es6?$/,
-              exclude: /(node_modules|bower_components)/,
-              loader: 'babel',
-              query: {
-                presets: ['es2015']
-              }
-            }
-        ]
+        loaders: [ {
+          test: /\.es6?$/,
+          exclude: /(node_modules|bower_components)/,
+          loader: 'babel',
+          query: {
+            presets: ['es2015']
+          }
+        } ]
       }
     })).
-    pipe(sourcemaps.write({ includeContent: true })).
+    pipe(sourcemaps.write('./')).
     pipe(gulp.dest('./'));
   return stream;
 });
