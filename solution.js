@@ -163,10 +163,10 @@
 	
 	      this.data = {};
 	      this.blocks = 0;
-	      this.lowestX = null;
-	      this.lowestY = null;
-	      this.highestX = null;
-	      this.highestY = null;
+	      this.lowestX = 0;
+	      this.lowestY = 0;
+	      this.highestX = 0;
+	      this.highestY = 0;
 	    }
 	
 	    _createClass(Map, [{
@@ -180,10 +180,10 @@
 	            type: cell.type,
 	            pos: pos
 	          };
-	          if (!this.lowestX || pos.x < this.lowestX) this.lowestX = pos.x;
-	          if (!this.lowestY || pos.y < this.lowestY) this.lowestY = pos.y;
-	          if (!this.highestX || pos.x > this.highestX) this.highestX = pos.x;
-	          if (!this.highestY || pos.y > this.highestY) this.highestY = pos.y;
+	          if (pos.x < this.lowestX) this.lowestX = pos.x;
+	          if (pos.y < this.lowestY) this.lowestY = pos.y;
+	          if (pos.x > this.highestX) this.highestX = pos.x;
+	          if (pos.y > this.highestY) this.highestY = pos.y;
 	        }
 	      }
 	      // Get cell is a sort of loose javascripty interface - just pass it an object with x and y (that is sometimes a Position, and sometimes not)
@@ -213,18 +213,17 @@
 	        var exported = [];
 	        var BLOCKED = 1;
 	        var WALKABLE = 0;
-	        var xi = 0;
-	        for (var x = this.lowestX - 1; x <= this.highestX + 1; x++) {
-	          var yi = 0;
-	          exported[xi] = [];
-	          for (var y = this.lowestY; y <= this.highestY; y++) {
+	        var yi = 0;
+	        for (var y = this.highestY; y >= this.lowestY; y--) {
+	          var xi = 0;
+	          exported[yi] = [];
+	          for (var x = this.lowestX; x <= this.highestX; x++) {
 	            var target = this.getCell({ x: x, y: y });
-	            if (!target) exported[xi][yi] = BLOCKED;else if (target.type === WALL) exported[xi][yi] = BLOCKED;else exported[xi][yi] = WALKABLE;
-	            yi++;
+	            if (!target) exported[yi][xi] = BLOCKED;else if (target.type === WALL) exported[yi][xi] = BLOCKED;else exported[yi][xi] = WALKABLE;
+	            xi++;
 	          }
-	          xi++;
+	          yi++;
 	        }
-	        //console.table(exported);
 	        return exported;
 	      }
 	    }]);
@@ -335,12 +334,7 @@
 	          if (target) break;
 	        }
 	        if (target) {
-	          try {
-	            myRoute = map.findPath(myPosition, target);
-	          } catch (error) {
-	            console.log('findPath errored', error.message);
-	            myRoute = [];
-	          }
+	          myRoute = map.findPath(myPosition, target);
 	          console.log('tried to route to', target, 'from', myPosition, 'result:', myRoute);
 	          //console.table(myRoute);
 	        }
@@ -350,11 +344,9 @@
 	      var points = pointMap();
 	      if (myRoute.length > 0) {
 	        var target = myRoute[0];
-	        console.log('Route target aquired:', target);
 	        for (var i = 0; i < DIRECTIONS.length; i++) {
 	          var direction = DIRECTIONS[i];
 	          var testTarget = myPosition[direction]();
-	          console.log('Im at', myPosition, 'I want to go to', testTarget, '/ ' + target);
 	          if (testTarget.x === target[0] && testTarget.y === target[1]) {
 	            console.log('Im following my nose to', target);
 	            points[direction] = 200;
@@ -3112,4 +3104,3 @@
 
 /***/ }
 /******/ ]);
-//# sourceMappingURL=solution.map

@@ -78,10 +78,10 @@ const Stacker = function () {
     constructor () {
       this.data = {};
       this.blocks = 0;
-      this.lowestX = null;
-      this.lowestY = null;
-      this.highestX = null;
-      this.highestY = null;
+      this.lowestX = 0;
+      this.lowestY = 0;
+      this.highestX = 0;
+      this.highestY = 0;
     }
     addCell (pos, cell) {
       if (this.data[pos.x] === undefined) this.data[pos.x] = {};
@@ -92,10 +92,10 @@ const Stacker = function () {
           type: cell.type,
           pos
         };
-        if (!this.lowestX || pos.x < this.lowestX) this.lowestX = pos.x;
-        if (!this.lowestY || pos.y < this.lowestY) this.lowestY = pos.y;
-        if (!this.highestX || pos.x > this.highestX) this.highestX = pos.x;
-        if (!this.highestY || pos.y > this.highestY) this.highestY = pos.y;
+        if (pos.x < this.lowestX) this.lowestX = pos.x;
+        if (pos.y < this.lowestY) this.lowestY = pos.y;
+        if (pos.x > this.highestX) this.highestX = pos.x;
+        if (pos.y > this.highestY) this.highestY = pos.y;
       }
     }
     // Get cell is a sort of loose javascripty interface - just pass it an object with x and y (that is sometimes a Position, and sometimes not)
@@ -122,20 +122,19 @@ const Stacker = function () {
       const exported = [];
       const BLOCKED = 1;
       const WALKABLE = 0;
-      let xi = 0;
-      for (let x = this.lowestX - 1; x <= this.highestX + 1; x++) {
-        let yi = 0;
-        exported[xi] = [];
-        for (let y = this.lowestY; y <= this.highestY; y++) {
+      let yi = 0;
+      for (let y = this.highestY; y >= this.lowestY; y--) {
+        let xi = 0;
+        exported[yi] = [];
+        for (let x = this.lowestX; x <= this.highestX; x++) {
           const target = this.getCell({ x, y });
-          if (!target) exported[xi][yi] = BLOCKED;
-          else if (target.type === WALL) exported[xi][yi] = BLOCKED;
-          else exported[xi][yi] = WALKABLE;
-          yi++;
+          if (!target) exported[yi][xi] = BLOCKED;
+          else if (target.type === WALL) exported[yi][xi] = BLOCKED;
+          else exported[yi][xi] = WALKABLE;
+          xi++;
         }
-        xi++;
+        yi++;
       }
-      //console.table(exported);
       return exported;
     }
   }
@@ -246,12 +245,7 @@ const Stacker = function () {
           if (target) break;
         }
         if (target) {
-          try {
-            myRoute = map.findPath(myPosition, target);
-          } catch (error) {
-            console.log('findPath errored', error.message);
-            myRoute = [];
-          }
+          myRoute = map.findPath(myPosition, target);
           console.log('tried to route to', target, 'from', myPosition, 'result:', myRoute);
           //console.table(myRoute);
         }
@@ -262,11 +256,9 @@ const Stacker = function () {
       const points = pointMap();
       if (myRoute.length > 0) {
         const target = myRoute[0];
-        console.log('Route target aquired:', target);
         for (let i = 0; i < DIRECTIONS.length; i++) {
           const direction = DIRECTIONS[i];
           const testTarget = myPosition[direction]();
-          console.log('Im at', myPosition, 'I want to go to', testTarget, `/ ${target}`);
           if (testTarget.x === target[0] && testTarget.y === target[1]) {
             console.log('Im following my nose to', target);
             points[direction] = 200;
